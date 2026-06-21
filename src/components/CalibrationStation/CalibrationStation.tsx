@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useMonitorStore } from '../../store/useMonitorStore';
 import { Calibration, CalibrationStatus, TempSensor } from '../../types';
 import { TempChart } from '../TempMonitor/TempChart';
@@ -99,9 +99,10 @@ interface CalibrationFormProps {
   initialData?: Calibration;
   onSubmit: (data: Omit<Calibration, 'id'>) => void;
   onCancel: () => void;
+  onOffsetChange?: (offset: number) => void;
 }
 
-const CalibrationForm: React.FC<CalibrationFormProps> = ({ sensorId, initialData, onSubmit, onCancel }) => {
+const CalibrationForm: React.FC<CalibrationFormProps> = ({ sensorId, initialData, onSubmit, onCancel, onOffsetChange }) => {
   const [offset, setOffset] = useState(initialData?.offset ?? 0);
   const [effectiveDate, setEffectiveDate] = useState(
     initialData ? formatDate(initialData.effectiveDate) : formatDate(Date.now())
@@ -137,7 +138,11 @@ const CalibrationForm: React.FC<CalibrationFormProps> = ({ sensorId, initialData
             type="number"
             step="0.1"
             value={offset}
-            onChange={e => setOffset(parseFloat(e.target.value) || 0)}
+            onChange={e => {
+              const newOffset = parseFloat(e.target.value) || 0;
+              setOffset(newOffset);
+              onOffsetChange?.(newOffset);
+            }}
             className="w-full px-2 py-1.5 text-sm font-mono bg-slate-900/60 border border-cyber-line rounded
               text-cyber-cyan focus:outline-none focus:border-cyber-cyan/60"
           />
@@ -227,6 +232,18 @@ export const CalibrationStation: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [previewOffset, setPreviewOffset] = useState(0);
   const [showPreview, setShowPreview] = useState(false);
+
+  useEffect(() => {
+    if (showForm || editingId) {
+      setShowPreview(true);
+      if (showForm) {
+        setPreviewOffset(0);
+      } else if (editingId) {
+        const cal = calibrations[editingId];
+        setPreviewOffset(cal?.offset ?? 0);
+      }
+    }
+  }, [showForm, editingId, calibrations]);
 
   const sensorList = useMemo(() => {
     const now = Date.now();
@@ -432,6 +449,7 @@ export const CalibrationStation: React.FC = () => {
                       setShowForm(false);
                       setShowPreview(false);
                     }}
+                    onOffsetChange={offset => setPreviewOffset(offset)}
                   />
                 </div>
               )}
@@ -504,6 +522,7 @@ export const CalibrationStation: React.FC = () => {
                     initialData={calibrations[editingId]}
                     onSubmit={handleUpdateCalibration}
                     onCancel={() => setEditingId(null)}
+                    onOffsetChange={offset => setPreviewOffset(offset)}
                   />
                 </div>
               )}

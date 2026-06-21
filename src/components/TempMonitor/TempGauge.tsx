@@ -5,6 +5,7 @@ interface Props {
   sensor: TempSensor;
   deviceName: string;
   deviceId: string;
+  calibrationExpired?: boolean;
 }
 
 const LEVEL_COLOR: Record<SensorAlertLevel, string> = {
@@ -21,7 +22,7 @@ const LEVEL_TEXT: Record<SensorAlertLevel, string> = {
   fuse: '熔断',
 };
 
-export const TempGauge: React.FC<Props> = ({ sensor, deviceName, deviceId }) => {
+export const TempGauge: React.FC<Props> = ({ sensor, deviceName, deviceId, calibrationExpired }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const targetRef = useRef(sensor.currentTemp);
   const displayRef = useRef(sensor.currentTemp);
@@ -46,7 +47,6 @@ export const TempGauge: React.FC<Props> = ({ sensor, deviceName, deviceId }) => 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
-      // Smooth temperature
       displayRef.current += (targetRef.current - displayRef.current) * 0.15;
       const temp = displayRef.current;
 
@@ -64,7 +64,6 @@ export const TempGauge: React.FC<Props> = ({ sensor, deviceName, deviceId }) => 
       const pct = Math.max(0, Math.min(1, (temp - minVal) / range));
       const curAngle = startAngle + pct * totalAngle;
 
-      // Background arc
       ctx.strokeStyle = 'rgba(0,240,255,0.12)';
       ctx.lineWidth = 8;
       ctx.lineCap = 'round';
@@ -72,7 +71,6 @@ export const TempGauge: React.FC<Props> = ({ sensor, deviceName, deviceId }) => 
       ctx.arc(cx, cy, radius, startAngle, endAngle);
       ctx.stroke();
 
-      // Warning band
       const warnPct = Math.max(0, Math.min(1, (sensor.warningThreshold - minVal) / range));
       const critPct = Math.max(0, Math.min(1, (sensor.criticalThreshold - minVal) / range));
       const fusePct = Math.max(0, Math.min(1, (sensor.fuseThreshold - minVal) / range));
@@ -88,8 +86,7 @@ export const TempGauge: React.FC<Props> = ({ sensor, deviceName, deviceId }) => 
       ctx.arc(cx, cy, radius, angleAt(critPct), angleAt(fusePct));
       ctx.stroke();
 
-      // Value arc
-      const color = LEVEL_COLOR[sensor.alertLevel];
+      const color = calibrationExpired ? '#FF2D55' : LEVEL_COLOR[sensor.alertLevel];
       ctx.strokeStyle = color;
       ctx.shadowColor = color;
       ctx.shadowBlur = 10;
@@ -99,7 +96,6 @@ export const TempGauge: React.FC<Props> = ({ sensor, deviceName, deviceId }) => 
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      // Threshold ticks
       ctx.lineWidth = 3;
       ctx.strokeStyle = 'rgba(255,149,0,0.9)';
       ctx.beginPath();
@@ -114,7 +110,6 @@ export const TempGauge: React.FC<Props> = ({ sensor, deviceName, deviceId }) => 
       ctx.lineTo(cx + Math.cos(tx2) * (radius + 6), cy + Math.sin(tx2) * (radius + 6));
       ctx.stroke();
 
-      // Needle tip
       const nx = cx + Math.cos(curAngle) * (radius + 2);
       const ny = cy + Math.sin(curAngle) * (radius + 2);
       ctx.fillStyle = color;
@@ -125,7 +120,6 @@ export const TempGauge: React.FC<Props> = ({ sensor, deviceName, deviceId }) => 
       ctx.fill();
       ctx.shadowBlur = 0;
 
-      // Center text: temp value
       ctx.fillStyle = color;
       ctx.font = 'bold 22px Orbitron, monospace';
       ctx.textAlign = 'center';
@@ -135,15 +129,13 @@ export const TempGauge: React.FC<Props> = ({ sensor, deviceName, deviceId }) => 
       ctx.fillText(`${temp.toFixed(1)}°`, cx, cy - 6);
       ctx.shadowBlur = 0;
 
-      // Subtext: unit
       ctx.fillStyle = 'rgba(138,155,179,0.7)';
       ctx.font = '9px JetBrains Mono, monospace';
       ctx.fillText(`目标 ${sensor.targetTemp.toFixed(0)}°C`, cx, cy + 14);
 
-      // Status
       ctx.fillStyle = color;
       ctx.font = 'bold 9px Orbitron, sans-serif';
-      ctx.fillText(LEVEL_TEXT[sensor.alertLevel].toUpperCase(), cx, cy + radius + 12);
+      ctx.fillText((calibrationExpired ? '已过期' : LEVEL_TEXT[sensor.alertLevel]).toUpperCase(), cx, cy + radius + 12);
 
       rafRef.current = requestAnimationFrame(draw);
     };
@@ -152,14 +144,15 @@ export const TempGauge: React.FC<Props> = ({ sensor, deviceName, deviceId }) => 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [sensor]);
+  }, [sensor, calibrationExpired]);
 
   return (
-    <div className={`rounded-lg p-2 bg-cyber-card/60 border
-      ${sensor.alertLevel === 'fuse' ? 'border-red-500/70 shadow-neon-red' :
-        sensor.alertLevel === 'critical' ? 'border-rose-500/50' :
-          sensor.alertLevel === 'warning' ? 'border-amber-500/50' :
-            'border-cyber-cyan/20'
+    <div className={`rounded-lg p-2 border
+      ${calibrationExpired ? 'border-rose-500/70 bg-rose-900/20' :
+        sensor.alertLevel === 'fuse' ? 'border-red-500/70 bg-cyber-card/60 shadow-neon-red' :
+          sensor.alertLevel === 'critical' ? 'border-rose-500/50 bg-cyber-card/60' :
+            sensor.alertLevel === 'warning' ? 'border-amber-500/50 bg-cyber-card/60' :
+              'border-cyber-cyan/20 bg-cyber-card/60'
       }
       relative overflow-hidden hud-corner
     `}>
@@ -174,6 +167,13 @@ export const TempGauge: React.FC<Props> = ({ sensor, deviceName, deviceId }) => 
           <div className="text-red-500">F {sensor.fuseThreshold.toFixed(0)}°</div>
         </div>
       </div>
+      {calibrationExpired && (
+        <div className="flex justify-end mb-1 px-1">
+          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-rose-600/30 text-rose-400 border border-rose-500/50">
+            校准已过期
+          </span>
+        </div>
+      )}
       <canvas ref={canvasRef} style={{ width: '100%', height: '110px', display: 'block' }} />
     </div>
   );

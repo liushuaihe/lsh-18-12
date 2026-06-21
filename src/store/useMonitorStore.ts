@@ -20,6 +20,28 @@ import { applyTransition, isDeviceRunning } from '../engine/stateMachine';
 import { recomputeAllThresholds, evaluateAlertLevel } from '../engine/thresholdEngine';
 import { checkAndTriggerFuse, createTemperatureAlert } from '../engine/fuseEngine';
 
+const STORAGE_KEY = 'monitor-calibrations';
+
+const loadCalibrations = (): Record<string, Calibration> => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('Failed to load calibrations from localStorage:', e);
+  }
+  return { ...MOCK_CALIBRATIONS };
+};
+
+const saveCalibrations = (calibrations: Record<string, Calibration>): void => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(calibrations));
+  } catch (e) {
+    console.error('Failed to save calibrations to localStorage:', e);
+  }
+};
+
 interface MonitorStore {
   devices: Record<string, Device>;
   sensors: Record<string, TempSensor>;
@@ -56,7 +78,7 @@ export const useMonitorStore = create<MonitorStore>((set, get) => ({
   devices: { ...MOCK_DEVICES },
   sensors: { ...MOCK_SENSORS },
   alerts: [],
-  calibrations: { ...MOCK_CALIBRATIONS },
+  calibrations: loadCalibrations(),
   globalFuseActive: false,
   tracePath: null,
   visualFlash: null,
@@ -429,23 +451,25 @@ export const useMonitorStore = create<MonitorStore>((set, get) => ({
 
   addCalibration: (cal) => {
     const id = `CAL-${Date.now()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-    set(prev => ({
-      calibrations: {
+    set(prev => {
+      const next = {
         ...prev.calibrations,
         [id]: { ...cal, id },
-      },
-    }));
+      };
+      saveCalibrations(next);
+      return { calibrations: next };
+    });
   },
 
   updateCalibration: (id, updates) => {
     set(prev => {
       if (!prev.calibrations[id]) return prev;
-      return {
-        calibrations: {
-          ...prev.calibrations,
-          [id]: { ...prev.calibrations[id], ...updates },
-        },
+      const next = {
+        ...prev.calibrations,
+        [id]: { ...prev.calibrations[id], ...updates },
       };
+      saveCalibrations(next);
+      return { calibrations: next };
     });
   },
 
@@ -453,6 +477,7 @@ export const useMonitorStore = create<MonitorStore>((set, get) => ({
     set(prev => {
       const next = { ...prev.calibrations };
       delete next[id];
+      saveCalibrations(next);
       return { calibrations: next };
     });
   },

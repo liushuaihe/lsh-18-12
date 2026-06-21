@@ -11,9 +11,17 @@ const SENSOR_COLORS = [
 ];
 
 export const TempMonitor: React.FC = () => {
-  const { devices, sensors } = useMonitorStore();
+  const { devices, sensors, calibrations } = useMonitorStore();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showAll, setShowAll] = useState(false);
+
+  const getCalibrationExpired = (sensorId: string): boolean => {
+    const now = Date.now();
+    const hasValid = Object.values(calibrations).some(
+      c => c.sensorId === sensorId && c.effectiveDate <= now && c.expiryDate >= now
+    );
+    return !hasValid;
+  };
 
   const allSensorList = Object.values(sensors)
     .map(s => ({ sensor: s, device: devices[s.deviceId] }))
@@ -42,6 +50,7 @@ export const TempMonitor: React.FC = () => {
     sensor: x.sensor,
     deviceName: x.device!.name,
     color: SENSOR_COLORS[i % SENSOR_COLORS.length],
+    calibrationExpired: getCalibrationExpired(x.sensor.id),
   }));
 
   const problematicSensors = allSensorList.filter(x =>
@@ -125,6 +134,7 @@ export const TempMonitor: React.FC = () => {
             sensor={x.sensor}
             deviceName={x.device!.name}
             deviceId={x.device!.id}
+            calibrationExpired={getCalibrationExpired(x.sensor.id)}
           />
         ))}
       </div>
